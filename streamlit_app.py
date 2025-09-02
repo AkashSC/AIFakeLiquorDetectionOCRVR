@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_js_eval import streamlit_js_eval
 
 st.set_page_config(page_title="Live Voice Verification", layout="centered")
 st.title("🎤 Live Voice Verification (Browser-based)")
@@ -8,67 +9,41 @@ Click **Start Listening** and speak into your mic (earphones also work).
 Your speech will be transcribed live below 👇.
 """)
 
-# A placeholder for transcription
-transcribed_text = st.empty()
-
-# Inject JavaScript for browser speech recognition
-st.markdown(
-    """
-    <script>
-    var recognizing = false;
-    var recognition = null;
-
-    function startRecognition() {
+# Run JavaScript in browser and get live transcript
+js_code = """
+async function listen() {
+    return new Promise((resolve, reject) => {
         if (!('webkitSpeechRecognition' in window)) {
             alert("Your browser does not support live speech recognition.");
-            return;
+            reject("Not supported");
         }
 
-        if (recognizing) {
-            recognition.stop();
-            recognizing = false;
-            document.getElementById("stt_button").innerText = "Start Listening";
-        } else {
-            recognition = new webkitSpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.lang = "en-US";
+        const recognition = new webkitSpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = "en-US";
 
-            recognition.onresult = function(event) {
-                var transcript = "";
-                for (var i = event.resultIndex; i < event.results.length; ++i) {
-                    transcript += event.results[i][0].transcript;
-                }
-                // Send transcript back to Streamlit
-                var streamlitDoc = window.parent.document;
-                var textarea = streamlitDoc.querySelector('textarea[data-testid="stTextArea-input"]');
-                textarea.value = transcript;
-                textarea.dispatchEvent(new Event("input", { bubbles: true }));
-            };
+        recognition.onresult = function(event) {
+            let transcript = "";
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                transcript += event.results[i][0].transcript;
+            }
+            resolve(transcript);
+        };
 
-            recognition.start();
-            recognizing = true;
-            document.getElementById("stt_button").innerText = "Stop Listening";
-        }
-    }
-    </script>
-    """,
-    unsafe_allow_html=True,
-)
+        recognition.onerror = function(event) {
+            reject(event.error);
+        };
 
-# Hidden text area to capture JS output
-spoken_text = st.text_area("Live Transcription:", "", key="speech_text")
+        recognition.start();
+    });
+}
 
-# Button to trigger JS
-st.markdown(
-    """
-    <button id="stt_button" onclick="startRecognition()" style="padding:10px 20px; font-size:16px;">
-        Start Listening
-    </button>
-    """,
-    unsafe_allow_html=True,
-)
+listen();
+"""
 
-# Show live result
-if spoken_text:
-    transcribed_text.success(f"🗣️ You said: {spoken_text}")
+# Button triggers JS evaluation
+if st.button("Start Listening"):
+    transcript = streamlit_js_eval(js_code=js_code)
+    if transcript:
+        st.success(f"🗣️ You said: {transcript}")
