@@ -14,15 +14,20 @@ class AudioProcessor(AudioProcessorBase):
     def __init__(self):
         self.recognizer = sr.Recognizer()
         self.buffer = bytes()
-        self.sample_rate = 16000  # standard speech recognition sample rate
+        self.sample_rate = 16000  # standard for speech recognition
 
     def recv_audio(self, frame: av.AudioFrame):
-        # Convert audio frame to numpy int16
-        audio = frame.to_ndarray().astype(np.int16).tobytes()
-        self.buffer += audio
+        # Convert to mono (1 channel) 16-bit PCM
+        audio = frame.to_ndarray()
+        if audio.ndim > 1:
+            audio = np.mean(audio, axis=1).astype(np.int16)  # convert stereo → mono
+        else:
+            audio = audio.astype(np.int16)
+
+        self.buffer += audio.tobytes()
 
         # Process every ~3 seconds
-        if len(self.buffer) > self.sample_rate * 2 * 3:  # 3 seconds of audio
+        if len(self.buffer) > self.sample_rate * 2 * 3:  # 3 sec * 2 bytes
             audio_data = sr.AudioData(self.buffer, self.sample_rate, 2)
             try:
                 text = self.recognizer.recognize_google(audio_data)
@@ -31,13 +36,13 @@ class AudioProcessor(AudioProcessorBase):
                 st.session_state["voice_text"] = "❌ Could not understand speech"
             except sr.RequestError:
                 st.session_state["voice_text"] = "⚠️ Google API unavailable"
-            self.buffer = bytes()  # reset buffer
+            self.buffer = bytes()  # reset
 
         return frame
 
 webrtc_streamer(
     key="speech",
-    mode=WebRtcMode.SENDONLY,  # ✅ FIXED: use enum, not string
+    mode=WebRtcMode.SENDONLY,
     rtc_configuration=RTC_CONFIGURATION,
     audio_processor_factory=AudioProcessor,
     media_stream_constraints={"audio": True, "video": False},
