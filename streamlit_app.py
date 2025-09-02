@@ -1,49 +1,75 @@
 import streamlit as st
 from streamlit_js_eval import streamlit_js_eval
 
-st.set_page_config(page_title="Live Voice Verification", layout="centered")
-st.title("🎤 Live Voice Verification (Browser-based)")
+st.set_page_config(page_title="Live Voice Transcription", layout="centered")
+st.title("🎤 Live Voice Transcription")
 
 st.markdown("""
-Click **Start Listening** and speak into your mic (earphones also work).  
-Your speech will be transcribed live below 👇.
+Press **Start Listening** below and speak.  
+Your speech will be transcribed live in the text box.
 """)
 
-# Run JavaScript in browser and get live transcript
+# JS code to capture live speech using browser Web Speech API
 js_code = """
-async function listen() {
-    return new Promise((resolve, reject) => {
-        if (!('webkitSpeechRecognition' in window)) {
-            alert("Your browser does not support live speech recognition.");
-            reject("Not supported");
-        }
+let recognition;
+let isListening = false;
 
-        const recognition = new webkitSpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = "en-US";
+async function startListening() {
+    if (!('webkitSpeechRecognition' in window)) {
+        alert('Your browser does not support Speech Recognition.');
+        return '';
+    }
+    recognition = new webkitSpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
 
-        recognition.onresult = function(event) {
-            let transcript = "";
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                transcript += event.results[i][0].transcript;
+    let finalTranscript = '';
+    recognition.onresult = (event) => {
+        let interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+                finalTranscript += event.results[i][0].transcript;
+            } else {
+                interimTranscript += event.results[i][0].transcript;
             }
-            resolve(transcript);
-        };
+        }
+        window.transcript = finalTranscript + interimTranscript;
+    };
 
-        recognition.onerror = function(event) {
-            reject(event.error);
-        };
-
-        recognition.start();
-    });
+    recognition.start();
+    isListening = true;
+    return 'Listening started...';
 }
 
-listen();
+async function stopListening() {
+    if (recognition && isListening) {
+        recognition.stop();
+        isListening = false;
+        return 'Listening stopped.';
+    }
+    return 'Was not listening.';
+}
+
+return {startListening: startListening, stopListening: stopListening};
 """
 
-# Button triggers JS evaluation
-if st.button("Start Listening"):
-    transcript = streamlit_js_eval(js_code=js_code)
-    if transcript:
-        st.success(f"🗣️ You said: {transcript}")
+# Initialize JS functions
+js_funcs = streamlit_js_eval(js_code=js_code, key="js_funcs", return_value=True)
+
+# Buttons to start/stop
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("▶️ Start Listening"):
+        msg = js_funcs["startListening"]()
+        st.info(msg)
+
+with col2:
+    if st.button("⏹ Stop Listening"):
+        msg = js_funcs["stopListening"]()
+        st.warning(msg)
+
+# Display live transcription
+st.markdown("### 📝 Transcription")
+transcript_text = streamlit_js_eval(js_code="window.transcript || ''", key="live_transcript")
+st.text_area("Live Transcript", value=transcript_text, height=200)
