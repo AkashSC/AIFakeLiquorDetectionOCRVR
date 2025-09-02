@@ -1,93 +1,36 @@
 import streamlit as st
-import requests
-from PIL import Image
-import io
-
-# -----------------------------
-# Voice Libraries
-# -----------------------------
+from streamlit_webrtc import webrtc_streamer, AudioProcessorBase, RTCConfiguration
 import speech_recognition as sr
-from streamlit_webrtc import webrtc_streamer, AudioProcessorBase, WebRtcMode
+import av
 
-# -----------------------------
-# Load dataset
-# -----------------------------
-with open("sample_data/dataset.txt", "r") as f:
-    dataset = [line.strip() for line in f.readlines()]
+st.title("🎤 Live Voice Verification")
 
-# -----------------------------
-# Streamlit UI
-# -----------------------------
-st.set_page_config(page_title="🍺 OCR + Voice Verifier", page_icon="🍺")
-st.title("🍺 OCR + Voice Product Verifier")
-st.write("Upload a product image or speak the product name to verify against dataset.")
+RTC_CONFIGURATION = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
 
-# -----------------------------
-# Image Upload & OCR
-# -----------------------------
-uploaded_file = st.file_uploader("Upload Image", type=["jpg","jpeg","png"])
-if uploaded_file:
-    st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
+class AudioProcessor(AudioProcessorBase):
+    def __init__(self):
+        self.recognizer = sr.Recognizer()
 
-    if st.button("Verify Product Image"):
-        st.info("Running OCR, please wait...")
+    def recv_audio(self, frame: av.AudioFrame):
+        audio = frame.to_ndarray().flatten().astype("int16")
+        # Convert raw audio to WAV for SpeechRecognition
+        with sr.AudioData(audio.tobytes(), frame.sample_rate, 2) as source:
+            try:
+                text = self.recognizer.recognize_google(source)
+                st.session_state["voice_text"] = text
+            except sr.UnknownValueError:
+                st.session_state["voice_text"] = "Could not understand"
+        return frame
 
-        try:
-            files = {
-                "filename": (uploaded_file.name, uploaded_file, uploaded_file.type)
-            }
-            data = {"apikey": "helloworld", "language": "eng"}
+webrtc_streamer(
+    key="speech",
+    mode="sendonly",
+    rtc_configuration=RTC_CONFIGURATION,
+    audio_processor_factory=AudioProcessor,
+    media_stream_constraints={"audio": True, "video": False},
+)
 
-            response = requests.post(
-                "https://api.ocr.space/parse/image",
-                files=files,
-                data=data
-            )
-            result = response.json()
-
-            if "ParsedResults" in result and result["ParsedResults"]:
-                parsed_text = result["ParsedResults"][0].get("ParsedText", "").strip()
-
-                if parsed_text:
-                    st.success(f"Extracted Text: {parsed_text}")
-
-                    matches = [p for p in dataset if parsed_text.lower() in p.lower()]
-                    if matches:
-                        st.success(f"✅ Product matches dataset: {matches}")
-                    else:
-                        st.warning("❌ No match found in dataset.")
-                else:
-                    st.error("OCR failed: No text detected.")
-            else:
-                error_message = result.get("ErrorMessage", "Unknown OCR API error")
-                st.error(f"OCR failed: {error_message}")
-
-        except Exception as e:
-            st.error(f"OCR request failed: {str(e)}")
-
-# -----------------------------
-# Voice Verification
-# -----------------------------
-st.subheader("🎤 Voice Verification")
-
-if st.button("Start Voice Verification"):
-    st.info("Listening... Please speak the product name.")
-    recognizer = sr.Recognizer()
-    mic = sr.Microphone()
-
-    try:
-        with mic as source:
-            recognizer.adjust_for_ambient_noise(source)
-            audio = recognizer.listen(source, timeout=5)
-        voice_text = recognizer.recognize_google(audio)
-        st.success(f"You said: {voice_text}")
-
-        matches = [p for p in dataset if voice_text.lower() in p.lower()]
-        if matches:
-            st.success(f"✅ Voice matches dataset: {matches}")
-        else:
-            st.warning("❌ No match found in dataset.")
-    except sr.WaitTimeoutError:
-        st.error("Listening timed out, please try again.")
-    except Exception as e:
-        st.error(f"Voice verification failed: {str(e)}")
+if "voice_text" in st.session_state:
+    st.write("Recognized:", st.session_state["voice_text"])
