@@ -1,73 +1,82 @@
 import streamlit as st
-from streamlit_javascript import st_javascript
 
-st.title("🎤 Live Voice Transcription")
+st.set_page_config(page_title="🎤 Live Voice Verification")
 
-# UI Buttons
-start = st.button("▶️ Start Listening")
-stop = st.button("⏹️ Stop Listening")
+st.title("🎤 Live Voice Verification")
 
-if start:
-    text = st_javascript("""
-    () => {
-      return new Promise((resolve, reject) => {
-        try {
-          var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-          if (!SpeechRecognition) {
-            resolve("SpeechRecognition not supported in this browser.");
-            return;
-          }
+st.markdown("""
+Click **Start Listening** and allow microphone access when prompted.
+""")
 
-          if (!window.recognition) {
-            window.recognition = new SpeechRecognition();
-            window.recognition.continuous = true;
-            window.recognition.interimResults = true;
-            window.recognition.lang = "en-US";
+# Add a placeholder for transcript
+transcript_box = st.empty()
 
-            window.finalTranscript = "";
+# Inject Web Speech API JS
+st.markdown("""
+<script>
+let recognition;
+let isListening = false;
 
-            window.recognition.onresult = (event) => {
-              let interimTranscript = "";
-              for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                  window.finalTranscript += event.results[i][0].transcript;
-                } else {
-                  interimTranscript += event.results[i][0].transcript;
-                }
-              }
-              document.getElementById("transcript").innerText = window.finalTranscript + " " + interimTranscript;
-            };
-          }
-
-          if (!document.getElementById("transcript")) {
-            const div = document.createElement("div");
-            div.id = "transcript";
-            div.style = "margin-top:20px; font-size:16px; color:green;";
-            document.body.appendChild(div);
-          }
-
-          window.recognition.start();
-          resolve("Listening...");
-        } catch (err) {
-          resolve("Exception: " + err.message);
-        }
-      });
+function startListening() {
+    if (!('webkitSpeechRecognition' in window)) {
+        alert("Your browser does not support Web Speech API. Please use Chrome or Edge.");
+        return;
     }
-    """)
-    st.write(text)
 
-if stop:
-    text = st_javascript("""
-    () => {
-      return new Promise((resolve, reject) => {
-        if (window.recognition) {
-          window.recognition.stop();
-          resolve(document.getElementById("transcript")?.innerText || "No transcript captured.");
-        } else {
-          resolve("Not started.");
+    recognition = new webkitSpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onstart = function() {
+        console.log("🎤 Voice recognition started");
+    };
+
+    recognition.onresult = function(event) {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript;
         }
-      });
+        const streamlitDoc = window.parent.document;
+        let box = streamlitDoc.querySelector("#transcript-box");
+        if (box) {
+            box.innerText = transcript;
+        }
+    };
+
+    recognition.onerror = function(event) {
+        console.error("Speech recognition error", event.error);
+    };
+
+    recognition.onend = function() {
+        console.log("Voice recognition ended");
+    };
+
+    recognition.start();
+    isListening = true;
+}
+
+function stopListening() {
+    if (recognition && isListening) {
+        recognition.stop();
+        isListening = false;
+        console.log("🎤 Voice recognition stopped");
     }
-    """)
-    st.subheader("📝 Transcript")
-    st.write(text)
+}
+</script>
+""", unsafe_allow_html=True)
+
+# Buttons
+st.markdown("""
+<div style="margin-top:20px;">
+    <button onclick="startListening()">▶️ Start Listening</button>
+    <button onclick="stopListening()">⏹ Stop Listening</button>
+</div>
+""", unsafe_allow_html=True)
+
+# Transcript box
+st.markdown("""
+<div id="transcript-box" style="border:1px solid #ccc; padding:10px; margin-top:20px; min-height:50px;">
+🎙 Speak something and your transcript will appear here...
+</div>
+""", unsafe_allow_html=True)
