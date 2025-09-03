@@ -4,12 +4,14 @@ st.set_page_config(page_title="🎤 Live Voice Verification")
 
 st.title("🎤 Live Voice Verification")
 
-st.markdown("""
-Click **Start Listening** and allow microphone access when prompted.
-""")
+st.markdown("Click **Start Listening** and allow microphone access when prompted.")
 
-# Add a placeholder for transcript
-transcript_box = st.empty()
+# Transcript placeholder
+st.markdown("""
+<div id="transcript-box" style="border:1px solid #ccc; padding:10px; margin-top:20px; min-height:50px;">
+🎙 Speak something and your transcript will appear here...
+</div>
+""", unsafe_allow_html=True)
 
 # Inject Web Speech API JS
 st.markdown("""
@@ -28,17 +30,12 @@ function startListening() {
     recognition.interimResults = true;
     recognition.lang = "en-US";
 
-    recognition.onstart = function() {
-        console.log("🎤 Voice recognition started");
-    };
-
     recognition.onresult = function(event) {
         let transcript = "";
         for (let i = event.resultIndex; i < event.results.length; i++) {
             transcript += event.results[i][0].transcript;
         }
-        const streamlitDoc = window.parent.document;
-        let box = streamlitDoc.querySelector("#transcript-box");
+        const box = document.getElementById("transcript-box");
         if (box) {
             box.innerText = transcript;
         }
@@ -46,10 +43,6 @@ function startListening() {
 
     recognition.onerror = function(event) {
         console.error("Speech recognition error", event.error);
-    };
-
-    recognition.onend = function() {
-        console.log("Voice recognition ended");
     };
 
     recognition.start();
@@ -63,20 +56,16 @@ function stopListening() {
         console.log("🎤 Voice recognition stopped");
     }
 }
+
+// Expose functions so Streamlit can call them
+window.startListening = startListening;
+window.stopListening = stopListening;
 </script>
 """, unsafe_allow_html=True)
 
-# Buttons
-st.markdown("""
-<div style="margin-top:20px;">
-    <button onclick="startListening()">▶️ Start Listening</button>
-    <button onclick="stopListening()">⏹ Stop Listening</button>
-</div>
-""", unsafe_allow_html=True)
+# Use Streamlit buttons (they call JS via eval)
+if st.button("▶️ Start Listening"):
+    st.markdown("<script>startListening()</script>", unsafe_allow_html=True)
 
-# Transcript box
-st.markdown("""
-<div id="transcript-box" style="border:1px solid #ccc; padding:10px; margin-top:20px; min-height:50px;">
-🎙 Speak something and your transcript will appear here...
-</div>
-""", unsafe_allow_html=True)
+if st.button("⏹ Stop Listening"):
+    st.markdown("<script>stopListening()</script>", unsafe_allow_html=True)
