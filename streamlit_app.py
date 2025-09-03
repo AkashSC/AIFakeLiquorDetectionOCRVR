@@ -1,75 +1,32 @@
 import streamlit as st
+from streamlit_webrtc import webrtc_streamer, AudioProcessorBase
+import numpy as np
+import whisper
 
-st.set_page_config(page_title="🎤 Live Voice Verification")
+st.set_page_config(page_title="🎤 Whisper Live Transcription")
 
-st.title("🎤 Live Voice Verification")
-st.markdown("Speak into your microphone. Your words will appear below:")
+st.title("🎤 Whisper Live Transcription")
+model = whisper.load_model("base")  # can use "tiny", "small", etc.
 
-# Transcript placeholder
-st.markdown("""
-<div id="transcript-box" style="
-    border:1px solid #ccc;
-    padding:10px;
-    margin-top:20px;
-    min-height:80px;
-    font-size:18px;
-    background:#f9f9f9;
-    white-space: pre-wrap;
-">
-🎙 Waiting for your voice...
-</div>
-""", unsafe_allow_html=True)
+class AudioProcessor(AudioProcessorBase):
+    def __init__(self):
+        self.buffer = []
 
-# Inject Web Speech API JS with permission handling
-st.markdown("""
-<script>
-function startRecognition() {
-    if (!('webkitSpeechRecognition' in window)) {
-        document.getElementById("transcript-box").innerText =
-            "❌ Web Speech API not supported. Use Chrome or Edge.";
-        return;
-    }
+    def recv_audio(self, frames, **kwargs):
+        audio = np.frombuffer(frames.to_ndarray().tobytes(), np.int16).astype(np.float32) / 32768.0
+        self.buffer.extend(audio.tolist())
+        if len(self.buffer) > 16000 * 5:  # every 5s
+            result = model.transcribe(np.array(self.buffer))
+            st.session_state.transcript = result["text"]
+            self.buffer = []
+        return frames
 
-    try {
-        const recognition = new webkitSpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = "en-US";
+webrtc_streamer(
+    key="speech",
+    mode="sendonly",
+    audio_processor_factory=AudioProcessor,
+    media_stream_constraints={"audio": True, "video": False},
+)
 
-        recognition.onresult = function(event) {
-            let transcript = "";
-            for (let i = 0; i < event.results.length; i++) {
-                transcript += event.results[i][0].transcript + " ";
-            }
-            const box = document.getElementById("transcript-box");
-            if (box) {
-                box.innerText = transcript.trim();
-            }
-        };
-
-        recognition.onerror = function(event) {
-            const box = document.getElementById("transcript-box");
-            if (box) {
-                box.innerText = "⚠️ Speech error: " + event.error;
-            }
-        };
-
-        recognition.onend = function() {
-            recognition.start(); // Auto restart
-        };
-
-        recognition.start();
-        console.log("🎤 Speech recognition started");
-    } catch (err) {
-        document.getElementById("transcript-box").innerText =
-            "⚠️ Could not start speech recognition: " + err;
-    }
-}
-
-// Ensure it only runs once
-if (!window.recognitionStarted) {
-    window.recognitionStarted = true;
-    startRecognition();
-}
-</script>
-""", unsafe_allow_html=True)
+st.markdown("### Transcript")
+st.write(st.session_state.get("transcript", "🎙 Waiting..."))
