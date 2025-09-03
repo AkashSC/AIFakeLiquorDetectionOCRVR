@@ -9,67 +9,58 @@ Press **Start Listening** below and speak.
 Your speech will be transcribed live in the text box.
 """)
 
-# JS code to capture live speech using browser Web Speech API
-js_code = """
-let recognition;
-let isListening = false;
-
-async function startListening() {
+# JS to start/stop recognition
+start_js = """
+if (!window.recognition) {
     if (!('webkitSpeechRecognition' in window)) {
         alert('Your browser does not support Speech Recognition.');
-        return '';
-    }
-    recognition = new webkitSpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    } else {
+        window.recognition = new webkitSpeechRecognition();
+        window.recognition.continuous = true;
+        window.recognition.interimResults = true;
+        window.recognition.lang = 'en-US';
+        window.transcript = "";
 
-    let finalTranscript = '';
-    recognition.onresult = (event) => {
-        let interimTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-                finalTranscript += event.results[i][0].transcript;
-            } else {
-                interimTranscript += event.results[i][0].transcript;
+        window.recognition.onresult = (event) => {
+            let finalTranscript = '';
+            let interimTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
             }
-        }
-        window.transcript = finalTranscript + interimTranscript;
-    };
-
-    recognition.start();
-    isListening = true;
-    return 'Listening started...';
-}
-
-async function stopListening() {
-    if (recognition && isListening) {
-        recognition.stop();
-        isListening = false;
-        return 'Listening stopped.';
+            window.transcript = finalTranscript + interimTranscript;
+        };
     }
-    return 'Was not listening.';
 }
-
-return {startListening: startListening, stopListening: stopListening};
+window.recognition.start();
+'Listening started...';
 """
 
-# Initialize JS functions
-js_funcs = streamlit_js_eval(js_code=js_code, key="js_funcs", return_value=True)
+stop_js = """
+if (window.recognition) {
+    window.recognition.stop();
+    'Listening stopped.';
+} else {
+    'Not running.';
+}
+"""
 
-# Buttons to start/stop
+# Buttons
 col1, col2 = st.columns(2)
 with col1:
     if st.button("▶️ Start Listening"):
-        msg = js_funcs["startListening"]()
-        st.info(msg)
+        streamlit_js_eval(js_code=start_js, key="start_js")
+        st.info("Listening started...")
 
 with col2:
     if st.button("⏹ Stop Listening"):
-        msg = js_funcs["stopListening"]()
-        st.warning(msg)
+        streamlit_js_eval(js_code=stop_js, key="stop_js")
+        st.warning("Listening stopped.")
 
-# Display live transcription
+# Display transcript
 st.markdown("### 📝 Transcription")
 transcript_text = streamlit_js_eval(js_code="window.transcript || ''", key="live_transcript")
-st.text_area("Live Transcript", value=transcript_text, height=200)
+st.text_area("Live Transcript", value=transcript_text or "", height=200)
