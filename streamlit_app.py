@@ -31,7 +31,6 @@ if mode == "OCR (Image Upload)":
             st.info("Running OCR, please wait...")
 
             try:
-                # Send the file with proper filename and content type
                 files = {
                     "filename": (uploaded_file.name, uploaded_file, uploaded_file.type)
                 }
@@ -72,11 +71,20 @@ if mode == "OCR (Image Upload)":
 elif mode == "Speech Recognition":
     st.markdown("""
     <h3>🎤 Speak the Product Name</h3>
-    <p>Click <b>Start</b> and say the product name clearly. The transcript will appear below.</p>
-    <button onclick="startRecognition()">Start Listening</button>
-    <button onclick="stopRecognition()">Stop</button>
+    <p>Click <b>Start Listening</b> and say the product name clearly. The transcript will appear below.</p>
+    
+    <button onclick="startRecognition()" 
+        style="padding:10px 20px;margin:5px;background:green;color:white;border:none;border-radius:5px;">
+        ▶ Start Listening
+    </button>
+    <button onclick="stopRecognition()" 
+        style="padding:10px 20px;margin:5px;background:red;color:white;border:none;border-radius:5px;">
+        ⏹ Stop
+    </button>
+
     <div id="output" style="border:1px solid #ccc;margin-top:20px;padding:10px;
         font-size:18px;min-height:80px;">🎙 Waiting...</div>
+
     <script>
       let recognition;
       function startRecognition() {
@@ -94,8 +102,15 @@ elif mode == "Speech Recognition":
           for (let i = 0; i < event.results.length; i++) {
             transcript += event.results[i][0].transcript + " ";
           }
-          document.getElementById("output").innerText = transcript.trim();
-          localStorage.setItem("speech_text", transcript.trim());
+          transcript = transcript.trim();
+          document.getElementById("output").innerText = transcript;
+
+          // send transcript to Streamlit
+          const streamlitInput = window.parent.document.querySelector('input[data-testid="stTextInput"]');
+          if (streamlitInput) {
+            streamlitInput.value = transcript;
+            streamlitInput.dispatchEvent(new Event("input", { bubbles: true }));
+          }
         };
         recognition.onerror = (event) => {
           document.getElementById("output").innerText = "⚠️ Error: " + event.error;
@@ -108,8 +123,7 @@ elif mode == "Speech Recognition":
     </script>
     """, unsafe_allow_html=True)
 
-    # A textbox to show transcript (copied manually for now)
-    transcript = st.text_input("Transcript (copy/paste from above box)")
+    transcript = st.text_input("Transcript (auto-filled when you speak)")
 
     if transcript:
         st.success(f"📄 You said: {transcript}")
