@@ -1,4 +1,5 @@
 Coca Cola
+Coca-Cola
 Pepsi
 Sprite
 Fanta
